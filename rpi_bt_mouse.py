@@ -29,6 +29,32 @@ P_CTRL = 0x11
 P_INTR = 0x13
 
 
+def setup_hint() -> str:
+    return "\n".join(
+        [
+            'BTD="$(readlink -f /usr/libexec/bluetooth/bluetoothd /usr/lib/bluetooth/bluetoothd 2>/dev/null | head -n 1)"',
+            "sudo mkdir -p /etc/systemd/system/bluetooth.service.d",
+            "printf '[Service]\\nExecStart=\\nExecStart=%s --compat --noplugin=input\\n' \"$BTD\" | sudo tee /etc/systemd/system/bluetooth.service.d/override.conf",
+            "sudo systemctl daemon-reload",
+            "sudo systemctl restart bluetooth",
+        ]
+    )
+
+
+def bluetoothd_cmdline() -> str:
+    try:
+        result = subprocess.run(
+            ["pgrep", "-a", "bluetoothd"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except OSError:
+        return ""
+    return result.stdout.strip()
+
+
 def run(*args: str) -> None:
     subprocess.run(args, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -49,6 +75,15 @@ def register_sdp_service() -> bool:
         print("Missing sdptool. Install it with: sudo apt install bluez", file=sys.stderr)
         return False
 
+    cmdline = bluetoothd_cmdline()
+    if "--compat" not in cmdline or "--noplugin=input" not in cmdline:
+        print("bluetoothd is not running with the needed options.", file=sys.stderr)
+        print(f"Current bluetoothd: {cmdline or 'not running'}", file=sys.stderr)
+        print("Run this, then start the script again:", file=sys.stderr)
+        print(setup_hint(), file=sys.stderr)
+        return False
+
+    run("sdptool", "del", "0x10000")
     result = subprocess.run(
         ["sdptool", "add", "--handle=0x10000", "HID"],
         check=False,
@@ -60,9 +95,25 @@ def register_sdp_service() -> bool:
         print("Registered Bluetooth HID SDP record.")
         return True
 
-    print(result.stdout.strip(), file=sys.stderr)
+    fallback = subprocess.run(
+        ["sdptool", "add", "HID"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if fallback.returncode == 0:
+        print("Registered Bluetooth HID SDP record.")
+        return True
+
+    first_output = result.stdout.strip() or "(sdptool produced no output)"
+    second_output = fallback.stdout.strip() or "(fallback sdptool produced no output)"
+    print(first_output, file=sys.stderr)
+    print(second_output, file=sys.stderr)
     print("Could not register the HID SDP record.", file=sys.stderr)
-    print("Make sure bluetoothd is running with --compat --noplugin=input.", file=sys.stderr)
+    print(f"Current bluetoothd: {cmdline or 'not running'}", file=sys.stderr)
+    print("Try restarting bluetooth, then run the script again:", file=sys.stderr)
+    print("sudo systemctl restart bluetooth", file=sys.stderr)
     return False
 
 
