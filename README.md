@@ -15,15 +15,15 @@ sudo ./setup_bluetooth_mouse.sh
 Start the Bluetooth mouse service:
 
 ```bash
-sudo python3 bluetooth_mouse.py
+sudo ./run_bluetooth_mouse_safe.sh
 ```
 
-If TyrionTalk or `bt-call-bridge` is installed, stop it first because it can own the Bluetooth profile:
+The safe runner temporarily stops TyrionTalk's `bt-call-bridge`, switches BlueZ into HID mouse mode, runs the mouse script, and restores the previous Bluetooth setup when you press Ctrl+C.
+
+Run without the movement demo:
 
 ```bash
-sudo systemctl stop bt-call-bridge.service
-sudo systemctl restart bluetooth
-sudo python3 bluetooth_mouse.py
+sudo ./run_bluetooth_mouse_safe.sh --no-demo
 ```
 
 On Android, open Bluetooth settings and pair with:
@@ -48,12 +48,6 @@ Remove an old Android pairing and pair again:
 ```bash
 bluetoothctl devices
 bluetoothctl remove PHONE_MAC_ADDRESS
-```
-
-Run without the movement demo:
-
-```bash
-sudo python3 bluetooth_mouse.py --no-demo
 ```
 
 Find another project/service that is using Bluetooth HID:

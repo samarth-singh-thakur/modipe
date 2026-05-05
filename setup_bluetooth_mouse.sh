@@ -26,24 +26,8 @@ retry_bluetoothctl() {
   return 1
 }
 
-if [[ -x /usr/lib/bluetooth/bluetoothd ]]; then
-  BLUETOOTHD="/usr/lib/bluetooth/bluetoothd"
-elif [[ -x /usr/libexec/bluetooth/bluetoothd ]]; then
-  BLUETOOTHD="/usr/libexec/bluetooth/bluetoothd"
-else
-  BLUETOOTHD="bluetoothd"
-fi
-
-mkdir -p /etc/systemd/system/bluetooth.service.d
-cat >/etc/systemd/system/bluetooth.service.d/zzz-modipe-hid-device.conf <<EOF
-[Service]
-ExecStart=
-ExecStart=${BLUETOOTHD} --experimental --compat -P input
-EOF
-
 systemctl daemon-reload
 systemctl enable bluetooth
-systemctl stop bt-call-bridge.service 2>/dev/null || true
 systemctl restart bluetooth
 rfkill unblock bluetooth || true
 sleep 3
@@ -53,5 +37,4 @@ retry_bluetoothctl "make the adapter pairable" pairable on
 retry_bluetoothctl "make the adapter discoverable" discoverable on
 
 echo "Bluetooth HID dependencies installed."
-echo "If TyrionTalk/bt-call-bridge was using Bluetooth, keep it stopped while using this mouse."
-echo "Now run: sudo python3 bluetooth_mouse.py"
+echo "Now run: sudo ./run_bluetooth_mouse_safe.sh"
