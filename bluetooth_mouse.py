@@ -25,6 +25,7 @@ from gi.repository import GLib
 
 HID_UUID = "00001124-0000-1000-8000-00805f9b34fb"
 PROFILE_PATH = "/bluez/rpi_hid_mouse_profile"
+AGENT_PATH = "/bluez/rpi_hid_mouse_agent"
 
 
 REPORT_DESCRIPTOR_HEX = (
@@ -226,6 +227,65 @@ class HidProfile(dbus.service.Object):
         print(f"Bluetooth connection canceled for {device}")
 
 
+class PairingAgent(dbus.service.Object):
+    def __init__(self, bus: dbus.SystemBus) -> None:
+        super().__init__(bus, AGENT_PATH)
+        self.bus = bus
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
+    def Release(self) -> None:
+        print("Bluetooth pairing agent released")
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="s")
+    def RequestPinCode(self, device: dbus.ObjectPath) -> str:
+        print(f"PIN requested by {device}; using empty PIN")
+        self._trust_device(device)
+        return ""
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="u")
+    def RequestPasskey(self, device: dbus.ObjectPath) -> dbus.UInt32:
+        print(f"Passkey requested by {device}; accepting with 000000")
+        self._trust_device(device)
+        return dbus.UInt32(0)
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="ouq", out_signature="")
+    def DisplayPasskey(self, device: dbus.ObjectPath, passkey: dbus.UInt32, entered: dbus.UInt16) -> None:
+        print(f"Passkey display requested by {device}; ignoring display-only request")
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
+    def DisplayPinCode(self, device: dbus.ObjectPath, pincode: str) -> None:
+        print(f"PIN display requested by {device}; ignoring display-only request")
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="ou", out_signature="")
+    def RequestConfirmation(self, device: dbus.ObjectPath, passkey: dbus.UInt32) -> None:
+        print(f"Auto-confirming pairing with {device}")
+        self._trust_device(device)
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="o", out_signature="")
+    def RequestAuthorization(self, device: dbus.ObjectPath) -> None:
+        print(f"Auto-authorizing pairing with {device}")
+        self._trust_device(device)
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="os", out_signature="")
+    def AuthorizeService(self, device: dbus.ObjectPath, uuid: str) -> None:
+        print(f"Auto-authorizing service {uuid} for {device}")
+        self._trust_device(device)
+
+    @dbus.service.method("org.bluez.Agent1", in_signature="", out_signature="")
+    def Cancel(self) -> None:
+        print("Bluetooth pairing request canceled")
+
+    def _trust_device(self, device: dbus.ObjectPath) -> None:
+        try:
+            props = dbus.Interface(
+                self.bus.get_object("org.bluez", device),
+                "org.freedesktop.DBus.Properties",
+            )
+            props.Set("org.bluez.Device1", "Trusted", dbus.Boolean(True))
+        except dbus.exceptions.DBusException:
+            pass
+
+
 def require_root() -> None:
     if os.geteuid() != 0:
         raise SystemExit("Run as root: sudo python3 bluetooth_mouse.py")
@@ -240,15 +300,34 @@ def prepare_adapter(name: str) -> None:
     run_command(f"hciconfig hci0 name '{name}'")
     run_command("hciconfig hci0 class 0x002580")
     run_command("bluetoothctl power on >/dev/null")
-    run_command("bluetoothctl agent NoInputNoOutput >/dev/null")
-    run_command("bluetoothctl default-agent >/dev/null")
+    run_command(f"bluetoothctl system-alias '{name}' >/dev/null")
     run_command("bluetoothctl pairable on >/dev/null")
+    run_command("bluetoothctl pairable-timeout 0 >/dev/null")
     run_command("bluetoothctl discoverable on >/dev/null")
+    run_command("bluetoothctl discoverable-timeout 0 >/dev/null")
 
 
-def register_profile(run_demo: bool) -> HidProfile:
-    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-    bus = dbus.SystemBus()
+def register_agent(bus: dbus.SystemBus) -> PairingAgent:
+    agent = PairingAgent(bus)
+    manager = dbus.Interface(bus.get_object("org.bluez", "/org/bluez"), "org.bluez.AgentManager1")
+    try:
+        manager.UnregisterAgent(AGENT_PATH)
+    except dbus.exceptions.DBusException:
+        pass
+    manager.RegisterAgent(AGENT_PATH, "NoInputNoOutput")
+    manager.RequestDefaultAgent(AGENT_PATH)
+    return agent
+
+
+def unregister_agent(bus: dbus.SystemBus) -> None:
+    manager = dbus.Interface(bus.get_object("org.bluez", "/org/bluez"), "org.bluez.AgentManager1")
+    try:
+        manager.UnregisterAgent(AGENT_PATH)
+    except dbus.exceptions.DBusException:
+        pass
+
+
+def register_profile(bus: dbus.SystemBus, run_demo: bool) -> HidProfile:
     profile = HidProfile(bus, run_demo)
     manager = dbus.Interface(bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
     options = {
@@ -278,8 +357,7 @@ def register_profile(run_demo: bool) -> HidProfile:
     return profile
 
 
-def unregister_profile() -> None:
-    bus = dbus.SystemBus()
+def unregister_profile(bus: dbus.SystemBus) -> None:
     manager = dbus.Interface(bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
     try:
         manager.UnregisterProfile(PROFILE_PATH)
@@ -301,8 +379,11 @@ def main() -> None:
     if not Path("/usr/bin/bluetoothctl").exists():
         raise SystemExit("bluetoothctl not found. Install BlueZ: sudo apt install bluez")
 
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
+    agent = register_agent(bus)
     prepare_adapter(args.name)
-    profile = register_profile(run_demo=not args.no_demo)
+    profile = register_profile(bus, run_demo=not args.no_demo)
     loop = GLib.MainLoop()
 
     try:
@@ -314,7 +395,8 @@ def main() -> None:
     finally:
         for connection in profile.connections:
             connection.close()
-        unregister_profile()
+        unregister_profile(bus)
+        unregister_agent(bus)
 
 
 if __name__ == "__main__":

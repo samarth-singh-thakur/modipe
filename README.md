@@ -32,6 +32,8 @@ On Android, open Bluetooth settings and pair with:
 RaspberryPi Mouse
 ```
 
+If Android already has a failed pairing for `RaspberryPi Mouse`, forget/remove that device on Android first, then pair again while `run_bluetooth_mouse_safe.sh` is still running.
+
 After Android connects, the Pi sends a small mouse movement demo and one click.
 
 ## Useful Commands
