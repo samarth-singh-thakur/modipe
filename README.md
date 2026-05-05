@@ -4,7 +4,21 @@ Python helper script to make a USB OTG-capable Raspberry Pi enumerate as a USB H
 
 ## Raspberry Pi setup
 
-Enable USB gadget mode on the Pi, then reboot.
+Enable USB gadget mode on the Pi, then reboot:
+
+```bash
+sudo ./enable_usb_gadget_mode.sh
+```
+
+To restore the original boot settings later:
+
+```bash
+sudo ./restore_usb_gadget_mode.sh
+```
+
+The enable script makes a backup in `/boot/usb-gadget-backup` before changing boot files.
+
+Manual setup, if you prefer to edit the files yourself:
 
 Add this to `/boot/config.txt` or `/boot/firmware/config.txt`:
 
