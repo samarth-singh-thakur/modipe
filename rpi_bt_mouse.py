@@ -199,7 +199,13 @@ def register_profile() -> None:
         "RequireAuthorization": False,
         "AutoConnect": True,
     }
-    manager.RegisterProfile(PROFILE_PATH, HID_UUID, opts)
+    try:
+        manager.RegisterProfile(PROFILE_PATH, HID_UUID, opts)
+    except dbus.exceptions.DBusException as exc:
+        if exc.get_dbus_name() != "org.bluez.Error.NotPermitted" or "UUID already registered" not in str(exc):
+            raise
+        print("BlueZ already has a HID profile registered; continuing with the existing profile.")
+        print("If the phone cannot pair, reboot the Pi or restart bluetooth, then run this script again.")
     DBUS_LOOP = GLib.MainLoop()
     threading.Thread(target=DBUS_LOOP.run, daemon=True).start()
 
@@ -270,8 +276,14 @@ def main() -> int:
     configure_adapter("Raspberry Pi Mouse")
     register_profile()
 
-    control_server = l2cap_server(P_CTRL)
-    interrupt_server = l2cap_server(P_INTR)
+    try:
+        control_server = l2cap_server(P_CTRL)
+        interrupt_server = l2cap_server(P_INTR)
+    except OSError as exc:
+        print(exc, file=sys.stderr)
+        print("Try: sudo systemctl restart bluetooth", file=sys.stderr)
+        print("Then forget the Pi on Android and run this script again.", file=sys.stderr)
+        return 1
 
     print()
     print("On Android: Settings > Bluetooth > Pair new device > Raspberry Pi Mouse")

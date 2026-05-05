@@ -49,3 +49,14 @@ If the phone already remembers the Pi, use "Forget" on Android first, then pair 
 - It needs to run with `sudo` because binding Bluetooth HID L2CAP channels requires root.
 - If pairing is flaky, reboot the Pi, forget the Pi on Android, and run the script again before pairing.
 - On some Raspberry Pi OS images, another HID service can hold the same Bluetooth ports. Stop that service before running this script.
+
+## Troubleshooting
+
+If you see `UUID already registered`, BlueZ already has a HID profile active. The script now continues in that case. If Android still does not pair or the script says the L2CAP port is busy, run:
+
+```bash
+sudo systemctl restart bluetooth
+sudo python3 rpi_bt_mouse.py
+```
+
+Then forget the Pi in Android Bluetooth settings and pair again.
