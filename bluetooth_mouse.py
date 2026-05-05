@@ -258,8 +258,33 @@ def register_profile(run_demo: bool) -> HidProfile:
         "RequireAuthorization": False,
         "AutoConnect": True,
     }
-    manager.RegisterProfile(PROFILE_PATH, HID_UUID, options)
+    try:
+        manager.UnregisterProfile(PROFILE_PATH)
+    except dbus.exceptions.DBusException:
+        pass
+
+    try:
+        manager.RegisterProfile(PROFILE_PATH, HID_UUID, options)
+    except dbus.exceptions.DBusException as exc:
+        if "org.bluez.Error.NotPermitted" in exc.get_dbus_name():
+            raise SystemExit(
+                "Bluetooth HID profile is already registered.\n"
+                "Stop any old bluetooth_mouse.py process, or reset Bluetooth:\n"
+                "    sudo pkill -f bluetooth_mouse.py\n"
+                "    sudo systemctl restart bluetooth\n"
+                "    sudo python3 bluetooth_mouse.py"
+            ) from exc
+        raise
     return profile
+
+
+def unregister_profile() -> None:
+    bus = dbus.SystemBus()
+    manager = dbus.Interface(bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
+    try:
+        manager.UnregisterProfile(PROFILE_PATH)
+    except dbus.exceptions.DBusException:
+        pass
 
 
 def clamp_i8(value: int) -> int:
@@ -289,6 +314,7 @@ def main() -> None:
     finally:
         for connection in profile.connections:
             connection.close()
+        unregister_profile()
 
 
 if __name__ == "__main__":
