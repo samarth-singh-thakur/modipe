@@ -13,6 +13,7 @@ and a USB data cable connected from the Pi's USB gadget port to the phone.
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import time
 from pathlib import Path
@@ -112,6 +113,24 @@ def get_udc_name() -> str:
     return udcs[0].name
 
 
+def read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="ascii").strip()
+    except OSError:
+        return ""
+
+
+def get_bound_udc() -> str:
+    return read_text(GADGET / "UDC")
+
+
+def get_udc_state() -> str:
+    udc_name = get_bound_udc()
+    if not udc_name:
+        return "not bound"
+    return read_text(Path("/sys/class/udc") / udc_name / "state") or "unknown"
+
+
 def setup_gadget() -> None:
     require_root()
     load_modules()
@@ -196,8 +215,27 @@ def send_report(buttons: int = 0, x: int = 0, y: int = 0, wheel: int = 0) -> Non
             clamp_i8(wheel) & 0xFF,
         ]
     )
-    with HID_DEV.open("wb", buffering=0) as hid:
-        hid.write(report)
+    try:
+        with HID_DEV.open("wb", buffering=0) as hid:
+            hid.write(report)
+    except BrokenPipeError as exc:
+        raise SystemExit(
+            "The HID endpoint is not connected to a USB host.\n"
+            "The Pi gadget exists, but the phone is probably only charging or did not "
+            "enter USB OTG host mode.\n\n"
+            "Try:\n"
+            "  1. Use the Pi USB data/OTG port, not the power-only port.\n"
+            "  2. Use an Android OTG adapter/cable so the phone acts as host.\n"
+            "  3. Try another known data cable.\n"
+            "  4. Run: sudo python3 rpi_usb_mouse_gadget.py status"
+        ) from exc
+    except OSError as exc:
+        if exc.errno in {errno.ENODEV, errno.ESHUTDOWN}:
+            raise SystemExit(
+                "The USB HID device disconnected while sending a report. "
+                "Check the cable, OTG adapter, and phone USB mode."
+            ) from exc
+        raise
 
 
 def click(button: int = 1) -> None:
@@ -225,6 +263,19 @@ def move(x: int, y: int, wheel: int) -> None:
     send_report(x=x, y=y, wheel=wheel)
 
 
+def status() -> None:
+    require_root()
+    print(f"UDC controllers: {', '.join(p.name for p in sorted(Path('/sys/class/udc').iterdir())) or 'none'}")
+    print(f"Gadget path: {'present' if GADGET.exists() else 'missing'}")
+    print(f"Bound UDC: {get_bound_udc() or 'none'}")
+    print(f"UDC state: {get_udc_state()}")
+    print(f"HID device: {'present' if HID_DEV.exists() else 'missing'} ({HID_DEV})")
+    if get_udc_state() not in {"configured", "unknown"}:
+        print()
+        print("If UDC state is not configured, Android has not enumerated the Pi as a USB mouse yet.")
+        print("Use the Pi USB data/OTG port and an OTG adapter/cable on the Android phone.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Raspberry Pi USB HID mouse gadget")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -232,6 +283,7 @@ def main() -> None:
     subparsers.add_parser("setup", help="Configure and enable the USB mouse gadget")
     subparsers.add_parser("cleanup", help="Disable and remove the USB mouse gadget")
     subparsers.add_parser("demo", help="Move the mouse pointer and click once")
+    subparsers.add_parser("status", help="Show USB gadget and connection status")
 
     move_parser = subparsers.add_parser("move", help="Send one relative mouse movement")
     move_parser.add_argument("--x", type=int, default=0, help="Relative X movement, -127..127")
@@ -254,6 +306,8 @@ def main() -> None:
         cleanup_gadget()
     elif args.command == "demo":
         demo()
+    elif args.command == "status":
+        status()
     elif args.command == "move":
         move(args.x, args.y, args.wheel)
     elif args.command == "click":
