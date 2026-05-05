@@ -18,6 +18,14 @@ Start the Bluetooth mouse service:
 sudo python3 bluetooth_mouse.py
 ```
 
+If TyrionTalk or `bt-call-bridge` is installed, stop it first because it can own the Bluetooth profile:
+
+```bash
+sudo systemctl stop bt-call-bridge.service
+sudo systemctl restart bluetooth
+sudo python3 bluetooth_mouse.py
+```
+
 On Android, open Bluetooth settings and pair with:
 
 ```txt
