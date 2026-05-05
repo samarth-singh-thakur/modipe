@@ -1,59 +1,53 @@
-# Raspberry Pi USB Mouse Gadget
+# Raspberry Pi 3B Bluetooth Mouse
 
-Python helper script to make a USB OTG-capable Raspberry Pi enumerate as a USB HID mouse when connected to an Android phone.
+Bluetooth HID mouse script for Raspberry Pi 3 Model B. This is the correct approach for Pi 3B because its USB ports cannot act as a USB mouse device.
 
-## Raspberry Pi setup
+## Install
 
-Enable USB gadget mode on the Pi, then reboot:
-
-```bash
-sudo ./enable_usb_gadget_mode.sh
-```
-
-To restore the original boot settings later:
+Run on the Raspberry Pi:
 
 ```bash
-sudo ./restore_usb_gadget_mode.sh
+sudo ./setup_bluetooth_mouse.sh
 ```
 
-The enable script makes a backup in `/boot/usb-gadget-backup` before changing boot files.
+## Run
 
-Manual setup, if you prefer to edit the files yourself:
+Start the Bluetooth mouse service:
 
-Add this to `/boot/config.txt` or `/boot/firmware/config.txt`:
+```bash
+sudo python3 bluetooth_mouse.py
+```
+
+On Android, open Bluetooth settings and pair with:
 
 ```txt
-dtoverlay=dwc2
+RaspberryPi Mouse
 ```
 
-Add this to `/boot/cmdline.txt` after `rootwait`, keeping the file as one single line:
+After Android connects, the Pi sends a small mouse movement demo and one click.
 
-```txt
-modules-load=dwc2
-```
+## Useful Commands
 
-## Usage
-
-Run as root on the Raspberry Pi:
+Make the Pi discoverable again:
 
 ```bash
-sudo python3 rpi_usb_mouse_gadget.py setup
-sudo python3 rpi_usb_mouse_gadget.py demo
+bluetoothctl discoverable on
+bluetoothctl pairable on
 ```
 
-Move or click manually:
+Remove an old Android pairing and pair again:
 
 ```bash
-sudo python3 rpi_usb_mouse_gadget.py move --x 20 --y 0
-sudo python3 rpi_usb_mouse_gadget.py click
+bluetoothctl devices
+bluetoothctl remove PHONE_MAC_ADDRESS
 ```
 
-Disable the gadget:
+Run without the movement demo:
 
 ```bash
-sudo python3 rpi_usb_mouse_gadget.py cleanup
+sudo python3 bluetooth_mouse.py --no-demo
 ```
 
 ## Notes
 
-Use a Raspberry Pi USB port that supports OTG/device mode and a real USB data cable. Charge-only cables will not work.
+This is for Raspberry Pi 3B Bluetooth HID. The older USB gadget scripts in this repo are only useful for boards with a usable USB OTG/device port, such as Pi Zero or Pi Zero 2 W.
