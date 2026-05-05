@@ -48,6 +48,12 @@ Run without the movement demo:
 sudo python3 bluetooth_mouse.py --no-demo
 ```
 
+Find another project/service that is using Bluetooth HID:
+
+```bash
+./diagnose_bluetooth_conflict.sh
+```
+
 ## Notes
 
 This is for Raspberry Pi 3B Bluetooth HID. The older USB gadget scripts in this repo are only useful for boards with a usable USB OTG/device port, such as Pi Zero or Pi Zero 2 W.
