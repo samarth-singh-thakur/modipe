@@ -23,6 +23,25 @@ fi
 BRIDGE_WAS_ACTIVE="no"
 BRIDGE_WAS_ENABLED="no"
 
+retry_bluetoothctl() {
+  local description="$1"
+  shift
+
+  for attempt in 1 2 3 4 5; do
+    if bluetoothctl "$@"; then
+      return 0
+    fi
+
+    echo "Bluetooth failed while trying to ${description}; resetting adapter and retrying (${attempt}/5)..."
+    rfkill unblock bluetooth 2>/dev/null || true
+    hciconfig hci0 reset 2>/dev/null || true
+    sleep 3
+  done
+
+  echo "Could not ${description}. Try: sudo systemctl restart bluetooth && sudo hciconfig hci0 reset"
+  return 1
+}
+
 if systemctl list-unit-files "${BRIDGE_SERVICE}" >/dev/null 2>&1; then
   if systemctl is-active --quiet "${BRIDGE_SERVICE}"; then
     BRIDGE_WAS_ACTIVE="yes"
@@ -66,11 +85,14 @@ systemctl stop "${BRIDGE_SERVICE}" 2>/dev/null || true
 systemctl daemon-reload
 systemctl restart bluetooth
 rfkill unblock bluetooth 2>/dev/null || true
-sleep 3
+hciconfig hci0 reset 2>/dev/null || true
+sleep 5
 
-bluetoothctl power on
-bluetoothctl pairable on
-bluetoothctl discoverable on
+retry_bluetoothctl "power on the adapter" power on
+retry_bluetoothctl "keep the adapter pairable" pairable-timeout 0
+retry_bluetoothctl "make the adapter pairable" pairable on
+retry_bluetoothctl "keep the adapter discoverable" discoverable-timeout 0
+retry_bluetoothctl "make the adapter discoverable" discoverable on
 
 echo "Bluetooth mouse mode is active."
 echo "When this script exits, it will restore the previous Bluetooth setup."
