@@ -42,6 +42,15 @@ retry_bluetoothctl() {
   return 1
 }
 
+optional_bluetoothctl() {
+  local description="$1"
+  shift
+
+  if ! bluetoothctl "$@"; then
+    echo "Skipping optional Bluetooth setting: ${description}"
+  fi
+}
+
 if systemctl list-unit-files "${BRIDGE_SERVICE}" >/dev/null 2>&1; then
   if systemctl is-active --quiet "${BRIDGE_SERVICE}"; then
     BRIDGE_WAS_ACTIVE="yes"
@@ -89,9 +98,9 @@ hciconfig hci0 reset 2>/dev/null || true
 sleep 5
 
 retry_bluetoothctl "power on the adapter" power on
-retry_bluetoothctl "keep the adapter pairable" pairable-timeout 0
+optional_bluetoothctl "pairable timeout" pairable-timeout 0
 retry_bluetoothctl "make the adapter pairable" pairable on
-retry_bluetoothctl "keep the adapter discoverable" discoverable-timeout 0
+optional_bluetoothctl "discoverable timeout" discoverable-timeout 0
 retry_bluetoothctl "make the adapter discoverable" discoverable on
 
 echo "Bluetooth mouse mode is active."
