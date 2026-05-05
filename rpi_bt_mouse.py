@@ -281,7 +281,8 @@ def main() -> int:
         interrupt_server = l2cap_server(P_INTR)
     except OSError as exc:
         print(exc, file=sys.stderr)
-        print("Try: sudo systemctl restart bluetooth", file=sys.stderr)
+        print("BlueZ's input plugin is probably holding the HID mouse ports.", file=sys.stderr)
+        print("Run the systemd override from README.md to start bluetoothd with --noplugin=input.", file=sys.stderr)
         print("Then forget the Pi on Android and run this script again.", file=sys.stderr)
         return 1
 

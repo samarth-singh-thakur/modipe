@@ -52,11 +52,25 @@ If the phone already remembers the Pi, use "Forget" on Android first, then pair 
 
 ## Troubleshooting
 
-If you see `UUID already registered`, BlueZ already has a HID profile active. The script now continues in that case. If Android still does not pair or the script says the L2CAP port is busy, run:
+If you see `UUID already registered`, BlueZ already has a HID profile active. The script now continues in that case.
+
+If the script says `Could not bind Bluetooth L2CAP PSM 0x11`, BlueZ's `input` plugin is holding the mouse ports. Disable that plugin with a systemd override:
 
 ```bash
+BTD="$(readlink -f /usr/libexec/bluetooth/bluetoothd /usr/lib/bluetooth/bluetoothd 2>/dev/null | head -n 1)"
+sudo mkdir -p /etc/systemd/system/bluetooth.service.d
+printf '[Service]\nExecStart=\nExecStart=%s --noplugin=input\n' "$BTD" | sudo tee /etc/systemd/system/bluetooth.service.d/override.conf
+sudo systemctl daemon-reload
 sudo systemctl restart bluetooth
 sudo python3 rpi_bt_mouse.py
 ```
 
 Then forget the Pi in Android Bluetooth settings and pair again.
+
+To undo this later:
+
+```bash
+sudo rm /etc/systemd/system/bluetooth.service.d/override.conf
+sudo systemctl daemon-reload
+sudo systemctl restart bluetooth
+```
